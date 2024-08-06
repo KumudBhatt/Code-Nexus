@@ -1,0 +1,33 @@
+datasource db {
+  provider = "postgresql" 
+  url      = env("DATABASE_URL") 
+}
+
+// Define the User model
+model User {
+  User_Id    Int          @id @default(autoincrement()) 
+  FirstName  String
+  LastName   String
+  Username   String       @unique 
+  Email      String       @unique 
+  Password   String       
+
+  UserProjects UserProjects[]
+}
+
+// Define the Project model
+model Project {
+  Project_Id   Int          @id @default(autoincrement()) 
+  Project_Name String
+  Data         String       // Store text data or file path
+
+  UserProjects UserProjects[]
+}
+
+model UserProjects {
+  User_Id     Int
+  Project_Id  Int
+  User        User    @relation(fields: [User_Id], references: [User_Id])
+  Project     Project @relation(fields: [Project_Id], references: [Project_Id])
+  @@id([User_Id, Project_Id]) 
+}
