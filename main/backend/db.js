@@ -18,7 +18,9 @@ const UserSchema = new Schema({
 // Define the Project schema
 const ProjectSchema = new Schema({
   projectName: { type: String, required: true },
-  data: { type: String } // Store text data or file path
+  data: { type: String }, // Store text data or file path
+  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true } // Add this line
+
 });
 
 // Create the models
