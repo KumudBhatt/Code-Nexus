@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import MonacoEditor from '@monaco-editor/react';
 import axiosInstance from '../axiosInstance';
@@ -9,18 +8,26 @@ const EditorPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { projectId } = useParams();
-  const { token } = location.state;
   const [inputValue, setInputValue] = useState('');
   const [outputValue, setOutputValue] = useState('');
   const [language, setLanguage] = useState("cpp");
   const [code, setCode] = useState('// Type your code here\n');
+  const [token, setToken] = useState(null);
   const editorRef = useRef(null);
 
   useEffect(() => {
+    // Ensure token is retrieved from local storage or location state
+    const storedToken = localStorage.getItem('token');
+    if (!storedToken) {
+      navigate('/login'); // Redirect to login if no token is found
+      return;
+    }
+    setToken(storedToken);
+
     const fetchProject = async () => {
       try {
         const { data } = await axiosInstance.get(`/user/projects/${projectId}`, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${storedToken}` }
         });
         const code = data.data?.data; // Adjust this according to the new response structure
         setCode(code || '// Type your code here\n');
@@ -30,8 +37,7 @@ const EditorPage = () => {
     };
     
     fetchProject();
-    
-  }, [projectId, token]);
+  }, [navigate, projectId]);
 
   const handleInputChange = (e) => {
     setInputValue(e.target.value);
@@ -73,10 +79,10 @@ const EditorPage = () => {
   return (
     <div className="flex h-screen">
       <aside className="bg-gray-800 text-white w-64 p-4 flex-shrink-0">
-        <div className="flex items-center mb-4">
-          <img className="h-12" src="/code-sync.png" alt="logo" />
-        </div>
-        <h3 className="text-xl font-semibold mb-4">Platform Name</h3>
+      <div className="flex-1 flex items-center justify-center mb-4">
+      <h1 className="text-xl font-semibold my-4">CODE NEXUS</h1> {/* Added margin-y */}
+    </div>
+
         <div className="mb-4">
           <button
             className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded mb-2 w-full"
