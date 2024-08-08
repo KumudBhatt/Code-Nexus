@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../axiosInstance';
 
 const Dashboard = () => {
   const [projects, setProjects] = useState([]);
-  const navigate = useNavigate(); // Initialize useNavigate
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -15,7 +15,7 @@ const Dashboard = () => {
         });
         setProjects(response.data.data);
       } catch (error) {
-        console.error('Error fetching projects:', error.response.data.message);
+        console.error('Error fetching projects:', error.response?.data?.message || error.message);
       }
     };
 
@@ -23,7 +23,8 @@ const Dashboard = () => {
   }, []);
 
   const handleProjectClick = (project) => {
-    navigate(`/editor/${project._id}`, { state: { project } });
+    const token = localStorage.getItem('token');
+    navigate(`/editor/${project._id}`, { state: { project, token } });
   };
 
   return (
@@ -59,7 +60,7 @@ const Dashboard = () => {
                   <li
                     key={project._id}
                     className="border p-4 mb-2 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleProjectClick(project)} // Add click handler
+                    onClick={() => handleProjectClick(project)}
                   >
                     {project.projectName}
                   </li>

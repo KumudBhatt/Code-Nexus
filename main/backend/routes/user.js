@@ -214,6 +214,27 @@ userRouter.delete("/delete/:projectId", authMiddleware, async (req, res) => {
         res.status(500).json(formatResponse('error', 'Internal server error', error.message));
     }
 });
+// Get project details by ID
+
+userRouter.get('/projects/:projectId', authMiddleware, async (req, res) => {
+    const { projectId } = req.params;
+
+    try {
+        const project = await Project.findById(projectId);
+        if (!project) {
+            return res.status(404).json(formatResponse('error', 'Project not found'));
+        }
+
+        if (project.userId.toString() !== req.userId) {
+            return res.status(403).json(formatResponse('error', 'Not authorized to access this project'));
+        }
+
+        return res.json(formatResponse('success', 'Project fetched successfully', project));
+    } catch (error) {
+        res.status(500).json(formatResponse('error', 'Internal server error', error.message));
+    }
+});
+
 
 // Compile and run a project
 userRouter.post('/projects/:projectId/run', authMiddleware, submissionLimiter, async (req, res) => {

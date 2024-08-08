@@ -2,10 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import MonacoEditor from '@monaco-editor/react';
+import axiosInstance from '../axiosInstance';
+import { FaSave } from 'react-icons/fa'; // Importing the save icon
 
 const EditorPage = () => {
   const navigate = useNavigate();
-  const { projectId } = useParams(); // Get projectId from the URL
+  const location = useLocation();
+  const { projectId } = useParams();
+  const { token } = location.state;
   const [inputValue, setInputValue] = useState('');
   const [outputValue, setOutputValue] = useState('');
   const [language, setLanguage] = useState("cpp");
@@ -13,21 +17,21 @@ const EditorPage = () => {
   const editorRef = useRef(null);
 
   useEffect(() => {
-    // Fetch project details using projectId
     const fetchProject = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const { data } = await axios.get(`/user/projects/${projectId}`, {
+        const { data } = await axiosInstance.get(`/user/projects/${projectId}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setCode(data.data.code || '// Type your code here\n'); // Initialize code with project data
+        const code = data.data?.data; // Adjust this according to the new response structure
+        setCode(code || '// Type your code here\n');
       } catch (error) {
-        console.error('Error fetching project:', error.response.data.message);
+        console.error('Error fetching project:', error.response?.data?.message || error.message);
       }
     };
-
+    
     fetchProject();
-  }, [projectId]);
+    
+  }, [projectId, token]);
 
   const handleInputChange = (e) => {
     setInputValue(e.target.value);
@@ -40,10 +44,24 @@ const EditorPage = () => {
       format: language
     };
     try {
-      const { data } = await axios.post(`http://localhost:3001/api/v1/user/projects/${projectId}/run`, payload);
-      setOutputValue(data.data.output);
+      const { data } = await axiosInstance.post(`/user/projects/${projectId}/run`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setOutputValue(data.data); // Access the output directly from data.data
     } catch (error) {
-      console.error('Error running code:', error.response.data.message);
+      console.error('Error running code:', error.response?.data?.message || error.message);
+    }
+  };
+
+  const handleSaveCode = async () => {
+    try {
+      const payload = { data: code }; // Adjust the payload as necessary
+      await axiosInstance.put(`/user/update/${projectId}`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('Code saved successfully!');
+    } catch (error) {
+      console.error('Error saving code:', error.response?.data?.message || error.message);
     }
   };
 
@@ -87,12 +105,20 @@ const EditorPage = () => {
               <option value="python">Python</option>
             </select>
           </div>
-          <button
-            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
-            onClick={handleRunCode}
-          >
-            Run Code
-          </button>
+          <div className="flex items-center">
+            <button
+              className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded mr-2 flex items-center"
+              onClick={handleSaveCode}
+            >
+              <FaSave className="mr-2" /> Save Code
+            </button>
+            <button
+              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+              onClick={handleRunCode}
+            >
+              Run Code
+            </button>
+          </div>
         </div>
         <div className="flex-1 flex flex-col">
           <div className="flex-grow mb-4" style={{ flexBasis: '60%' }}>
