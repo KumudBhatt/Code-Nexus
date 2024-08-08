@@ -1,3 +1,5 @@
+//routes/middleware.js
+
 const { JWT_SECRET } = require("../config.js");
 const jwt = require("jsonwebtoken");
 

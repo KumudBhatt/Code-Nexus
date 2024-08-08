@@ -1,4 +1,4 @@
-// backend/db.js
+// db.js
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 const { MONGO_URI } = require('./config');
