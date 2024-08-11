@@ -2,34 +2,48 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import MonacoEditor from '@monaco-editor/react';
 import axiosInstance from '../axiosInstance';
-import { FaSave } from 'react-icons/fa'; // Importing the save icon
+import { FaSave, FaCopy } from 'react-icons/fa';
+import { io } from 'socket.io-client';
+import { jwtDecode } from 'jwt-decode';
+import { v4 as uuidv4 } from 'uuid'; 
 
 const EditorPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { projectId } = useParams();
+  const { projectId } = useParams(); // Project ID from URL
   const [inputValue, setInputValue] = useState('');
   const [outputValue, setOutputValue] = useState('');
-  const [language, setLanguage] = useState("cpp");
+  const [language, setLanguage] = useState('cpp');
   const [code, setCode] = useState('// Type your code here\n');
   const [token, setToken] = useState(null);
+  const [roomId, setRoomId] = useState('');
+  const [username, setUsername] = useState('');
+  const [clients, setClients] = useState([]);
+  const [isOwner, setIsOwner] = useState(false);
   const editorRef = useRef(null);
+  const socketRef = useRef(null);
 
   useEffect(() => {
-    // Ensure token is retrieved from local storage or location state
     const storedToken = localStorage.getItem('token');
     if (!storedToken) {
-      navigate('/login'); // Redirect to login if no token is found
+      navigate('/'); 
       return;
     }
     setToken(storedToken);
+
+    try {
+      const decodedToken = jwtDecode(storedToken); // Decode the token
+      setUsername(decodedToken.username);
+    } catch (error) {
+      console.error('Error decoding token:', error);
+    }
 
     const fetchProject = async () => {
       try {
         const { data } = await axiosInstance.get(`/user/projects/${projectId}`, {
           headers: { Authorization: `Bearer ${storedToken}` }
         });
-        const code = data.data?.data; // Adjust this according to the new response structure
+        const code = data.data?.data;
         setCode(code || '// Type your code here\n');
       } catch (error) {
         console.error('Error fetching project:', error.response?.data?.message || error.message);
@@ -41,6 +55,9 @@ const EditorPage = () => {
 
   const handleInputChange = (e) => {
     setInputValue(e.target.value);
+    if (socketRef.current && roomId) {
+      socketRef.current.emit('inputUpdate', { roomId, input: e.target.value, username });
+    }
   };
 
   const handleRunCode = async () => {
@@ -53,7 +70,10 @@ const EditorPage = () => {
       const { data } = await axiosInstance.post(`/user/projects/${projectId}/run`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setOutputValue(data.data); // Access the output directly from data.data
+      setOutputValue(data.data); 
+      if (socketRef.current && roomId) {
+        socketRef.current.emit('outputUpdate', { roomId, output: data.data, username });
+      }
     } catch (error) {
       console.error('Error running code:', error.response?.data?.message || error.message);
     }
@@ -61,8 +81,8 @@ const EditorPage = () => {
 
   const handleSaveCode = async () => {
     try {
-      const payload = { data: code }; // Adjust the payload as necessary
-      await axiosInstance.put(`/user/update/${projectId}`, payload, {
+      const payload = { data: code }; 
+      await axiosInstance.put(`/user/projects/${projectId}`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert('Code saved successfully!');
@@ -71,18 +91,135 @@ const EditorPage = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/');
+
+  const handleCollaborativeMode = async () => {
+      if (socketRef.current) {
+          if (isOwner) {
+              // Disband the room if the user is the owner
+              try {
+                  await axiosInstance.put(`/user/projects/${projectId}/disbandRoom`, null, {
+                      headers: { Authorization: `Bearer ${token}` }
+                  });
+              } catch (error) {
+                  console.error('Error disbanding room:', error.response?.data?.message || error.message);
+              }
+              socketRef.current.emit('endSession', { roomId, username });
+              socketRef.current.disconnect();
+              setRoomId('');
+              setClients([]);
+              setIsOwner(false); 
+              navigate('/dashboard'); 
+          } else {
+              // Leave the room if the user is not the owner
+              socketRef.current.emit('leaveRoom', { roomId, username });
+              socketRef.current.disconnect();
+              setRoomId('');
+              setClients([]);
+              navigate('/dashboard');
+          }
+          return;
+      }
+  
+      // Generate a room ID using uuid
+      const generatedRoomId = uuidv4(); 
+  
+      // Create a new room if no socket connection exists
+      try {
+          const { data } = await axiosInstance.put(`/user/projects/${projectId}/addRoom`, { roomId: generatedRoomId }, {
+              headers: { Authorization: `Bearer ${token}` }
+          });
+
+          setRoomId(generatedRoomId);
+          setIsOwner(true); 
+  
+          const socket = io('http://localhost:3000');
+          socketRef.current = socket;
+  
+          socket.emit('joinRoom', { roomId: generatedRoomId, username });
+  
+          socket.on('codeUpdate', (newCode) => {
+              setCode(newCode);
+          });
+  
+          socket.on('clientUpdate', (clientsList) => {
+              setClients(clientsList);
+          });
+  
+          socket.on('roomDisbanded', () => {
+              alert('The room has been disbanded by the owner.');
+              socket.disconnect();
+              setRoomId('');
+              setClients([]);
+              navigate('/dashboard');
+          });
+      } catch (error) {
+          console.error('Error creating room:', error.response?.data?.message || error.message);
+      }
+  };
+  
+
+  useEffect(() => {
+    const query = new URLSearchParams(location.search);
+    const room = query.get('room');
+
+    if (room) {
+        setRoomId(room);
+        const socket = io('http://localhost:3000');
+        socketRef.current = socket;
+
+        socket.emit('joinRoom', { roomId: room, username });
+
+        socket.on('codeUpdate', (newCode) => {
+            setCode(newCode);
+        });
+
+        socket.on('clientUpdate', (clientsList) => {
+            setClients(clientsList);
+        });
+
+        socket.on('inputUpdate', (input) => {
+            setInputValue(input);
+        });
+
+        socket.on('outputUpdate', (output) => {
+            setOutputValue(output);
+        });
+
+        socket.on('roomDisbanded', () => {
+            alert('The room has been disbanded by the owner.');
+            socket.disconnect();
+            setRoomId('');
+            setClients([]);
+            navigate('/dashboard');
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }
+}, [location.search, projectId]);
+
+
+  const handleEditorChange = (value) => {
+    setCode(value);
+    if (socketRef.current) {
+      socketRef.current.emit('codeUpdate', { roomId, code: value, username });
+    }
+  };
+
+  const handleCopy = () => {
+    const textToCopy = `Project ID: ${projectId}\nRoom ID: ${roomId}`;
+    navigator.clipboard.writeText(textToCopy)
+      .then(() => alert('Copied to clipboard!'))
+      .catch(err => console.error('Failed to copy text: ', err));
   };
 
   return (
     <div className="flex h-screen">
       <aside className="bg-gray-800 text-white w-64 p-4 flex-shrink-0">
-      <div className="flex-1 flex items-center justify-center mb-4">
-      <h1 className="text-xl font-semibold my-4">CODE NEXUS</h1> {/* Added margin-y */}
-    </div>
-
+        <div className="flex-1 flex items-center justify-center mb-4">
+          <h1 className="text-xl font-semibold my-4">CODE NEXUS</h1>
+        </div>
         <div className="mb-4">
           <button
             className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded mb-2 w-full"
@@ -91,12 +228,43 @@ const EditorPage = () => {
             Dashboard
           </button>
           <button
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded w-full"
-            onClick={handleLogout}
+            className={`${roomId ? 'bg-red-500 hover:bg-red-600' : 'bg-purple-500 hover:bg-purple-600'} text-white px-4 py-2 rounded mb-2 w-full`}
+            onClick={handleCollaborativeMode}
           >
-            Logout
+            {roomId ? 'Leave Session' : 'Start Collaborative Session'}
           </button>
+          {(isOwner || roomId) && (
+            <div className="relative mt-2 p-4 border rounded border-gray-300 bg-gradient-to-r from-gray-100 to-gray-200">
+              <button
+                className="absolute top-2 right-2 text-gray-600 hover:text-gray-800"
+                onClick={handleCopy}
+                aria-label="Copy IDs"
+              >
+                <FaCopy />
+              </button>
+              <div className="mb-2 text-sm">
+                <p className="font-semibold text-gray-800">Project ID:</p>
+                <span className="text-blue-600 break-all">{projectId}</span>
+              </div>
+              {roomId && (
+                <div className="text-sm">
+                  <p className="font-semibold text-gray-800">Room ID:</p>
+                  <span className="text-blue-600 break-all">{roomId}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+        {roomId && (
+          <div>
+            <h2 className="text-lg font-semibold mb-2">Connected Clients:</h2>
+            <ul className="list-disc pl-5">
+              {clients.map((client, index) => (
+                <li key={index} className="text-sm">{client}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </aside>
       <main className="flex-1 h-full p-4 bg-gray-100 flex flex-col">
         <div className="flex items-center justify-between mb-4">
@@ -133,7 +301,7 @@ const EditorPage = () => {
                 height="100%"
                 defaultLanguage={language}
                 value={code}
-                onChange={(value) => setCode(value)}
+                onChange={handleEditorChange}
                 theme="vs-light"
                 options={{
                   fontSize: 14,

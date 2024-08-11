@@ -1,4 +1,3 @@
-//routes/user.js
 const express = require("express");
 const userRouter = express.Router();
 const { z } = require('zod');
@@ -9,8 +8,7 @@ const { JWT_SECRET } = require('../config');
 const authMiddleware = require("./middleware");
 const { User, Project } = require("../db");
 const { generateFile } = require('../generateFile');
-const { executeCpp } = require("../executeCpp"); 
-
+const { executeCpp } = require("../executeCpp");
 
 // Define the schemas for validation
 const signupSchema = z.object({
@@ -38,7 +36,12 @@ const updateBody = z.object({
 
 const projectSchema = z.object({
     projectName: z.string().min(1),
-    data: z.string().optional()
+    data: z.string().optional(),
+    roomId: z.string().optional(),
+});
+
+const roomSchema = z.object({
+    roomId: z.string().optional(), // Optional in case we're clearing the roomId
 });
 
 // Standardized response format
@@ -79,8 +82,8 @@ userRouter.post("/signup", async (req, res) => {
         data.password = hashedPassword;
         const user = await User.create(data);
         const userId = user._id;
-
-        const token = jwt.sign({ userId }, JWT_SECRET);
+        const username = user.username;
+        const token = jwt.sign({ userId, username }, JWT_SECRET);
 
         return res.json(formatResponse('success', 'User created successfully', { token }));
     } catch (error) {
@@ -108,7 +111,10 @@ userRouter.post("/signin", authLimiter, async (req, res) => {
             return res.status(401).json(formatResponse('error', 'Invalid password'));
         }
 
-        const token = jwt.sign({ userId: user._id }, JWT_SECRET);
+        const userId = user._id;
+        const username = user.username;
+        const token = jwt.sign({ userId, username }, JWT_SECRET);
+
         return res.status(200).json(formatResponse('success', 'Signin successful', { token }));
     } catch (error) {
         res.status(500).json(formatResponse('error', 'Internal server error', error.message));
@@ -214,10 +220,13 @@ userRouter.delete("/delete/:projectId", authMiddleware, async (req, res) => {
         res.status(500).json(formatResponse('error', 'Internal server error', error.message));
     }
 });
-// Get project details by ID
 
+// Get project details by ID
 userRouter.get('/projects/:projectId', authMiddleware, async (req, res) => {
     const { projectId } = req.params;
+    const userId = req.userId;
+    const roomId = req.query.room;  // Ensure this matches how the client sends the data
+    console.log("ROOM ID: ", roomId);  
 
     try {
         const project = await Project.findById(projectId);
@@ -225,16 +234,19 @@ userRouter.get('/projects/:projectId', authMiddleware, async (req, res) => {
             return res.status(404).json(formatResponse('error', 'Project not found'));
         }
 
-        if (project.userId.toString() !== req.userId) {
-            return res.status(403).json(formatResponse('error', 'Not authorized to access this project'));
+        if (project.userId.toString() === userId) {
+            return res.json(formatResponse('success', 'Project fetched successfully', project));
+        } else {
+            if (project.roomId && project.roomId === roomId) {
+                return res.json(formatResponse('success', 'Project fetched successfully', project));
+            } else {
+                return res.status(403).json(formatResponse('error', 'Not authorized to access this project'));
+            }
         }
-
-        return res.json(formatResponse('success', 'Project fetched successfully', project));
     } catch (error) {
-        res.status(500).json(formatResponse('error', 'Internal server error', error.message));
+        return res.status(500).json(formatResponse('error', 'Internal server error', error.message));
     }
 });
-
 
 // Compile and run a project
 userRouter.post('/projects/:projectId/run', authMiddleware, submissionLimiter, async (req, res) => {
@@ -246,26 +258,73 @@ userRouter.post('/projects/:projectId/run', authMiddleware, submissionLimiter, a
     }
 
     try {
-        // Find the project
         const project = await Project.findById(projectId);
         if (!project) {
             return res.status(404).json(formatResponse('error', 'Project not found'));
         }
 
-        // Check if the user owns the project
         if (project.userId.toString() !== req.userId) {
             return res.status(403).json(formatResponse('error', 'Not authorized to run this project'));
         }
 
-        // Generate a file with the provided code and format
         const filepath = await generateFile(format, code);
-
-        // Compile and run the generated file
         const output = await executeCpp(filepath, userInput);
 
         return res.status(200).json(formatResponse('success', 'Execution successful', output));
     } catch (error) {
         console.error("Error executing project:", error);
+        res.status(500).json(formatResponse('error', 'Internal server error', error.message));
+    }
+});
+
+// Add a room to a project
+userRouter.put('/projects/:projectId/addRoom', authMiddleware, async (req, res) => {
+    const { projectId } = req.params;
+    const data = req.body;
+    const result = roomSchema.safeParse(data);
+    console.log("ROOM ID " + data);
+    if (!result.success) {
+        return res.status(400).json(formatResponse('error', 'Invalid room data', result.error.errors));
+    }
+
+    try {
+        const project = await Project.findById(projectId);
+        if (!project) {
+            return res.status(404).json(formatResponse('error', 'Project not found'));
+        }
+
+        if (project.userId.toString() !== req.userId) {
+            return res.status(403).json(formatResponse('error', 'Not authorized to add a room to this project'));
+        }
+
+        project.roomId = data.roomId;
+        await project.save();
+
+        return res.json(formatResponse('success', 'Room added to project successfully'));
+    } catch (error) {
+        res.status(500).json(formatResponse('error', 'Internal server error', error.message));
+    }
+});
+
+// Disband or clear a room in a project
+userRouter.put('/projects/:projectId/disbandRoom', authMiddleware, async (req, res) => {
+    const { projectId } = req.params;
+
+    try {
+        const project = await Project.findById(projectId);
+        if (!project) {
+            return res.status(404).json(formatResponse('error', 'Project not found'));
+        }
+
+        if (project.userId.toString() !== req.userId) {
+            return res.status(403).json(formatResponse('error', 'Not authorized to disband this room'));
+        }
+
+        project.roomId = null;
+        await project.save();
+
+        return res.json(formatResponse('success', 'Room disbanded successfully'));
+    } catch (error) {
         res.status(500).json(formatResponse('error', 'Internal server error', error.message));
     }
 });
