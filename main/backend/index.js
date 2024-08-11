@@ -25,8 +25,6 @@ const connectedUsers = {};
 // Socket.IO configuration
 
 io.on('connection', (socket) => {
-    console.log('A user connected');
-
     // Handle joining a room
     socket.on('joinRoom', ({ roomId, username }) => {
         socket.join(roomId);

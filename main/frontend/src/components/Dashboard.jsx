@@ -86,30 +86,52 @@ const Dashboard = () => {
 
   return (
     <div className="flex h-screen">
+      {/* Sidebar */}
       <nav className="w-64 bg-gray-800 text-white p-6">
         <div className="text-xl font-semibold mb-6">Dashboard</div>
         <ul className="space-y-4">
-          <li
-            className={`cursor-pointer ${!showCreateProject && !showJoinRoom ? 'bg-gray-700' : ''}`}
-            onClick={() => { setShowCreateProject(false); setShowJoinRoom(false); }}
-          >
-            Projects
+          <li>
+            <button
+              className={`w-full text-left py-2 px-4 rounded-md ${
+                !showCreateProject && !showJoinRoom ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white'
+              }`}
+              onClick={() => { setShowCreateProject(false); setShowJoinRoom(false); }}
+            >
+              Projects
+            </button>
           </li>
-          <li
-            className={`cursor-pointer ${showCreateProject ? 'bg-gray-700' : ''}`}
-            onClick={() => { setShowCreateProject(true); setShowJoinRoom(false); }}
-          >
-            Create Project
+          <li>
+            <button
+              className={`w-full text-left py-2 px-4 rounded-md ${
+                showCreateProject ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white'
+              }`}
+              onClick={() => { setShowCreateProject(true); setShowJoinRoom(false); }}
+            >
+              Create Project
+            </button>
           </li>
-          <li
-            className={`cursor-pointer ${showJoinRoom ? 'bg-gray-700' : ''}`}
-            onClick={() => { setShowCreateProject(false); setShowJoinRoom(true); }}
-          >
-            Join Room
+          <li>
+            <button
+              className={`w-full text-left py-2 px-4 rounded-md ${
+                showJoinRoom ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white'
+              }`}
+              onClick={() => { setShowCreateProject(false); setShowJoinRoom(true); }}
+            >
+              Join Room
+            </button>
           </li>
-          <li className="cursor-pointer" onClick={handleLogout}>Logout</li>
+          <li>
+            <button
+              className="w-full text-left py-2 px-4 rounded-md bg-red-600 text-white"
+              onClick={handleLogout}
+            >
+              Logout
+            </button>
+          </li>
         </ul>
       </nav>
+
+      {/* Main Content */}
       <div className="flex-1 flex flex-col">
         <header className="w-full bg-gray-100 p-6">
           <h1 className="text-2xl font-semibold">Welcome, {username}!</h1>

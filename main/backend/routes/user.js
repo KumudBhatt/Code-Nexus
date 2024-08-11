@@ -226,7 +226,7 @@ userRouter.get('/projects/:projectId', authMiddleware, async (req, res) => {
     const { projectId } = req.params;
     const userId = req.userId;
     const roomId = req.query.room;  // Ensure this matches how the client sends the data
-    console.log("ROOM ID: ", roomId);  
+    console.log("ROOM ID at project: ", roomId);  
 
     try {
         const project = await Project.findById(projectId);
@@ -237,6 +237,7 @@ userRouter.get('/projects/:projectId', authMiddleware, async (req, res) => {
         if (project.userId.toString() === userId) {
             return res.json(formatResponse('success', 'Project fetched successfully', project));
         } else {
+            console.log("room id " + roomId + "ProjectRoom " + project.roomId);
             if (project.roomId && project.roomId === roomId) {
                 return res.json(formatResponse('success', 'Project fetched successfully', project));
             } else {
@@ -282,7 +283,7 @@ userRouter.put('/projects/:projectId/addRoom', authMiddleware, async (req, res) 
     const { projectId } = req.params;
     const data = req.body;
     const result = roomSchema.safeParse(data);
-    console.log("ROOM ID " + data);
+    console.log("ROOM ID " + data.roomId);
     if (!result.success) {
         return res.status(400).json(formatResponse('error', 'Invalid room data', result.error.errors));
     }

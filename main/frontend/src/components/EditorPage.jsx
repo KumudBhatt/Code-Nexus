@@ -4,8 +4,9 @@ import MonacoEditor from '@monaco-editor/react';
 import axiosInstance from '../axiosInstance';
 import { FaSave, FaCopy } from 'react-icons/fa';
 import { io } from 'socket.io-client';
-import { jwtDecode } from 'jwt-decode';
-import { v4 as uuidv4 } from 'uuid'; 
+import {jwtDecode} from 'jwt-decode';
+import { v4 as uuidv4 } from 'uuid';
+import Avatar from 'react-avatar';
 
 const EditorPage = () => {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ const EditorPage = () => {
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
     if (!storedToken) {
-      navigate('/'); 
+      navigate('/');
       return;
     }
     setToken(storedToken);
@@ -41,17 +42,21 @@ const EditorPage = () => {
     const fetchProject = async () => {
       try {
         const { data } = await axiosInstance.get(`/user/projects/${projectId}`, {
-          headers: { Authorization: `Bearer ${storedToken}` }
+          headers: { Authorization: `Bearer ${storedToken}` },
+          params: { room: roomId }, // Send roomId as a query parameter
         });
         const code = data.data?.data;
         setCode(code || '// Type your code here\n');
       } catch (error) {
-        console.error('Error fetching project:', error.response?.data?.message || error.message);
+        console.error(
+          'Error fetching project:',
+          error.response?.data?.message || error.message
+        );
       }
     };
-    
+
     fetchProject();
-  }, [navigate, projectId]);
+  }, [navigate, projectId, roomId]);
 
   const handleInputChange = (e) => {
     setInputValue(e.target.value);
@@ -64,13 +69,13 @@ const EditorPage = () => {
     const payload = {
       userInput: inputValue,
       code,
-      format: language
+      format: language,
     };
     try {
       const { data } = await axiosInstance.post(`/user/projects/${projectId}/run`, payload, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
-      setOutputValue(data.data); 
+      setOutputValue(data.data);
       if (socketRef.current && roomId) {
         socketRef.current.emit('outputUpdate', { roomId, output: data.data, username });
       }
@@ -81,9 +86,9 @@ const EditorPage = () => {
 
   const handleSaveCode = async () => {
     try {
-      const payload = { data: code }; 
+      const payload = { data: code };
       await axiosInstance.put(`/user/projects/${projectId}`, payload, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       alert('Code saved successfully!');
     } catch (error) {
@@ -91,118 +96,142 @@ const EditorPage = () => {
     }
   };
 
-
   const handleCollaborativeMode = async () => {
-      if (socketRef.current) {
-          if (isOwner) {
-              // Disband the room if the user is the owner
-              try {
-                  await axiosInstance.put(`/user/projects/${projectId}/disbandRoom`, null, {
-                      headers: { Authorization: `Bearer ${token}` }
-                  });
-              } catch (error) {
-                  console.error('Error disbanding room:', error.response?.data?.message || error.message);
-              }
-              socketRef.current.emit('endSession', { roomId, username });
-              socketRef.current.disconnect();
-              setRoomId('');
-              setClients([]);
-              setIsOwner(false); 
-              navigate('/dashboard'); 
-          } else {
-              // Leave the room if the user is not the owner
-              socketRef.current.emit('leaveRoom', { roomId, username });
-              socketRef.current.disconnect();
-              setRoomId('');
-              setClients([]);
-              navigate('/dashboard');
-          }
-          return;
+    if (socketRef.current) {
+      if (isOwner) {
+        // Disband the room if the user is the owner
+        try {
+          await axiosInstance.put(`/user/projects/${projectId}/disbandRoom`, null, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        } catch (error) {
+          console.error('Error disbanding room:', error.response?.data?.message || error.message);
+        }
+        socketRef.current.emit('endSession', { roomId, username });
+        socketRef.current.disconnect();
+        setRoomId('');
+        setClients([]);
+        setIsOwner(false);
+        navigate('/dashboard');
+      } else {
+        // Leave the room if the user is not the owner
+        socketRef.current.emit('leaveRoom', { roomId, username });
+        socketRef.current.disconnect();
+        setRoomId('');
+        setClients([]);
+        navigate('/dashboard');
       }
-  
-      // Generate a room ID using uuid
-      const generatedRoomId = uuidv4(); 
-  
-      // Create a new room if no socket connection exists
+      return;
+    }
+
+    // If roomId already exists in state, join the existing session
+    if (roomId) {
+      const socket = io('http://localhost:3000');
+      socketRef.current = socket;
+
+      socket.emit('joinRoom', { roomId, username });
+
+      socket.on('codeUpdate', (newCode) => {
+        setCode(newCode);
+      });
+
+      socket.on('clientUpdate', (clientsList) => {
+        setClients(clientsList);
+      });
+
+      socket.on('roomDisbanded', () => {
+        alert('The room has been disbanded by the owner.');
+        socket.disconnect();
+        setRoomId('');
+        setClients([]);
+        navigate('/dashboard');
+      });
+    } else {
+      // Create a new room if no roomId exists
+      const generatedRoomId = uuidv4();
+
       try {
-          const { data } = await axiosInstance.put(`/user/projects/${projectId}/addRoom`, { roomId: generatedRoomId }, {
-              headers: { Authorization: `Bearer ${token}` }
-          });
+        const { data } = await axiosInstance.put(
+          `/user/projects/${projectId}/addRoom`,
+          { roomId: generatedRoomId },
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
 
-          setRoomId(generatedRoomId);
-          setIsOwner(true); 
-  
-          const socket = io('http://localhost:3000');
-          socketRef.current = socket;
-  
-          socket.emit('joinRoom', { roomId: generatedRoomId, username });
-  
-          socket.on('codeUpdate', (newCode) => {
-              setCode(newCode);
-          });
-  
-          socket.on('clientUpdate', (clientsList) => {
-              setClients(clientsList);
-          });
-  
-          socket.on('roomDisbanded', () => {
-              alert('The room has been disbanded by the owner.');
-              socket.disconnect();
-              setRoomId('');
-              setClients([]);
-              navigate('/dashboard');
-          });
-      } catch (error) {
-          console.error('Error creating room:', error.response?.data?.message || error.message);
-      }
-  };
-  
+        setRoomId(generatedRoomId);
+        setIsOwner(true);
 
-  useEffect(() => {
-    const query = new URLSearchParams(location.search);
-    const room = query.get('room');
-
-    if (room) {
-        setRoomId(room);
         const socket = io('http://localhost:3000');
         socketRef.current = socket;
 
-        socket.emit('joinRoom', { roomId: room, username });
+        socket.emit('joinRoom', { roomId: generatedRoomId, username });
 
         socket.on('codeUpdate', (newCode) => {
-            setCode(newCode);
+          setCode(newCode);
         });
 
         socket.on('clientUpdate', (clientsList) => {
-            setClients(clientsList);
-        });
-
-        socket.on('inputUpdate', (input) => {
-            setInputValue(input);
-        });
-
-        socket.on('outputUpdate', (output) => {
-            setOutputValue(output);
+          setClients(clientsList);
         });
 
         socket.on('roomDisbanded', () => {
-            alert('The room has been disbanded by the owner.');
-            socket.disconnect();
-            setRoomId('');
-            setClients([]);
-            navigate('/dashboard');
+          alert('The room has been disbanded by the owner.');
+          socket.disconnect();
+          setRoomId('');
+          setClients([]);
+          navigate('/dashboard');
         });
-
-        return () => {
-            socket.disconnect();
-        };
+      } catch (error) {
+        console.error('Error creating room:', error.response?.data?.message || error.message);
+      }
     }
-}, [location.search, projectId]);
+  };
 
+  useEffect(() => {
+    const query = new URLSearchParams(location.search);
+    const room = query.get('room'); // Extract roomId from URL query parameter
+
+    if (room) {
+      setRoomId(room);
+      const socket = io('http://localhost:3000');
+      socketRef.current = socket;
+
+      socket.emit('joinRoom', { roomId: room, username });
+
+      socket.on('codeUpdate', (newCode) => {
+        setCode(newCode);
+      });
+
+      socket.on('clientUpdate', (clientsList) => {
+        setClients(clientsList);
+      });
+
+      socket.on('inputUpdate', (input) => {
+        setInputValue(input);
+      });
+
+      socket.on('outputUpdate', (output) => {
+        setOutputValue(output);
+      });
+
+      socket.on('roomDisbanded', () => {
+        alert('The room has been disbanded by the owner.');
+        socket.disconnect();
+        setRoomId('');
+        setClients([]);
+        navigate('/dashboard');
+      });
+
+      return () => {
+        socket.disconnect();
+      };
+    }
+  }, [location.search, projectId, username]);
 
   const handleEditorChange = (value) => {
     setCode(value);
-    if (socketRef.current) {
+    if (socketRef.current && roomId) {
       socketRef.current.emit('codeUpdate', { roomId, code: value, username });
     }
   };
@@ -211,8 +240,9 @@ const EditorPage = () => {
     const textToCopy = `Project ID: ${projectId}\nRoom ID: ${roomId}`;
     navigator.clipboard.writeText(textToCopy)
       .then(() => alert('Copied to clipboard!'))
-      .catch(err => console.error('Failed to copy text: ', err));
+      .catch((err) => console.error('Failed to copy text: ', err));
   };
+
 
   return (
     <div className="flex h-screen">
@@ -260,7 +290,10 @@ const EditorPage = () => {
             <h2 className="text-lg font-semibold mb-2">Connected Clients:</h2>
             <ul className="list-disc pl-5">
               {clients.map((client, index) => (
-                <li key={index} className="text-sm">{client}</li>
+                <li key={index} className="text-sm flex items-center">
+                  <Avatar name={username} size="30" round={true} />
+                  <span>{username}</span>
+                </li>
               ))}
             </ul>
           </div>
