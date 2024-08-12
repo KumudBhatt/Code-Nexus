@@ -3,8 +3,6 @@ const http = require("http");
 const { Server } = require("socket.io");
 const rootRouter = require("./routes/index.js");
 const cors = require("cors");
-const jwt = require("jsonwebtoken"); // For decoding JWT
-const { User } = require("./db"); // Import User model
 const PORT = 3000;
 
 const app = express();
@@ -23,7 +21,6 @@ app.use("/api/v1", rootRouter);
 const connectedUsers = {};
 
 // Socket.IO configuration
-
 io.on('connection', (socket) => {
     // Handle joining a room
     socket.on('joinRoom', ({ roomId, username }) => {
@@ -34,7 +31,7 @@ io.on('connection', (socket) => {
 
         // Broadcast the updated client list to the room
         const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []).map(
-            (socketId) => connectedUsers[socketId]
+            (socketId) => ({ username: connectedUsers[socketId] }) // Send as objects with username field
         );
         io.to(roomId).emit('clientUpdate', clientsInRoom);
 
@@ -43,39 +40,38 @@ io.on('connection', (socket) => {
     });
 
     // Handle code updates
-    socket.on('codeUpdate', ({ roomId, code, username }) => {
-        console.log(`${username} updated the code in room: ${roomId}`);
+    socket.on('codeUpdate', ({ roomId, code }) => {
+        console.log(`${connectedUsers[socket.id].username} updated the code in room: ${roomId}`);
         socket.broadcast.to(roomId).emit('codeUpdate', code);
     });
 
     // Handle input updates
-    socket.on('inputUpdate', ({ roomId, input, username }) => {
-        console.log(`${username} updated the input in room: ${roomId}`);
+    socket.on('inputUpdate', ({ roomId, input }) => {
+        console.log(`${connectedUsers[socket.id].username} updated the input in room: ${roomId}`);
         socket.broadcast.to(roomId).emit('inputUpdate', input);
     });
 
     // Handle output updates
-    socket.on('outputUpdate', ({ roomId, output, username }) => {
-        console.log(`${username} updated the output in room: ${roomId}`);
+    socket.on('outputUpdate', ({ roomId, output }) => {
+        console.log(`${connectedUsers[socket.id].username} updated the output in room: ${roomId}`);
         socket.broadcast.to(roomId).emit('outputUpdate', output);
     });
 
     // Handle user leaving the room
-    socket.on('leaveRoom', ({ roomId, username }) => {
+    socket.on('leaveRoom', ({ roomId }) => {
+        const username = connectedUsers[socket.id]?.username;
         socket.leave(roomId);
         delete connectedUsers[socket.id];
 
         console.log(`${username} left room: ${roomId}`);
 
         // Update the client list in the room
-        const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []).map(
-            (socketId) => connectedUsers[socketId]
-        );
-        io.to(roomId).emit('clientUpdate', clientsInRoom);
+        updateClientList(roomId);
     });
 
     // Handle the session owner ending the session
-    socket.on('endSession', ({ roomId, username }) => {
+    socket.on('endSession', ({ roomId }) => {
+        const username = connectedUsers[socket.id]?.username;
         console.log(`${username} ended the session in room: ${roomId}`);
         socket.broadcast.to(roomId).emit('roomDisbanded');
         io.in(roomId).socketsLeave(roomId);
@@ -88,20 +84,24 @@ io.on('connection', (socket) => {
 
     // Handle user disconnecting
     socket.on('disconnect', () => {
-        const username = connectedUsers[socket.id];
+        const { username, roomId } = connectedUsers[socket.id] || {};
         delete connectedUsers[socket.id];
         
         console.log(`${username} disconnected`);
 
-        // Notify other users in the room
-        const roomIds = Array.from(socket.rooms);
-        roomIds.forEach(roomId => {
-            const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []).map(
-                (socketId) => connectedUsers[socketId]
-            );
-            io.to(roomId).emit('clientUpdate', clientsInRoom);
-        });
+        if (roomId) {
+            // Notify other users in the room and update the client list
+            updateClientList(roomId);
+        }
     });
+
+    // Function to update the client list in a room
+    function updateClientList(roomId) {
+        const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []).map(
+            (socketId) => connectedUsers[socketId]?.username
+        );
+        io.to(roomId).emit('clientUpdate', clientsInRoom);
+    }
 });
 
 server.listen(PORT, () => {

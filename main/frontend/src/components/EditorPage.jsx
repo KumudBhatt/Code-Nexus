@@ -243,7 +243,6 @@ const EditorPage = () => {
       .catch((err) => console.error('Failed to copy text: ', err));
   };
 
-
   return (
     <div className="flex h-screen">
       <aside className="bg-gray-800 text-white w-64 p-4 flex-shrink-0">
@@ -288,11 +287,11 @@ const EditorPage = () => {
         {roomId && (
           <div>
             <h2 className="text-lg font-semibold mb-2">Connected Clients:</h2>
-            <ul className="list-disc pl-5">
+            <ul className="flex flex-wrap gap-4">
               {clients.map((client, index) => (
-                <li key={index} className="text-sm flex items-center">
-                  <Avatar name={username} size="30" round={true} />
-                  <span>{username}</span>
+                <li key={index} className="text-sm flex flex-col items-center">
+                  <Avatar name={client.username} size="50" round={true} /> 
+                  <span className="mt-2">{client.username}</span>
                 </li>
               ))}
             </ul>
