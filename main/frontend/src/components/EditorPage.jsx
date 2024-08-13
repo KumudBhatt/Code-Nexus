@@ -4,7 +4,7 @@ import MonacoEditor from '@monaco-editor/react';
 import axiosInstance from '../axiosInstance';
 import { FaSave, FaCopy } from 'react-icons/fa';
 import { io } from 'socket.io-client';
-import {jwtDecode} from 'jwt-decode';
+import { jwtDecode } from 'jwt-decode';
 import { v4 as uuidv4 } from 'uuid';
 import Avatar from 'react-avatar';
 
@@ -65,6 +65,13 @@ const EditorPage = () => {
     }
   };
 
+  const handleOutputChange = (e) => {
+    setOutputValue(e.target.value);
+    if (socketRef.current && roomId) {
+      socketRef.current.emit('outputUpdate', { roomId, output: e.target.value, username });
+    }
+  };
+
   const handleRunCode = async () => {
     const payload = {
       userInput: inputValue,
@@ -87,7 +94,7 @@ const EditorPage = () => {
   const handleSaveCode = async () => {
     try {
       const payload = { data: code };
-      await axiosInstance.put(`/user/projects/${projectId}`, payload, {
+      await axiosInstance.put(`/user/update/${projectId}`, payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
       alert('Code saved successfully!');
@@ -360,6 +367,7 @@ const EditorPage = () => {
                 <textarea
                   className="border border-gray-300 rounded p-2 w-full h-full resize-none overflow-auto"
                   value={outputValue}
+                  onChange={handleOutputChange}
                   readOnly
                   placeholder="Output will appear here..."
                 />
