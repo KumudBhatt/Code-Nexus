@@ -67,6 +67,22 @@ Code Nexus is an advanced code editor application designed to facilitate real-ti
     npm start
     ```
 
+## Preview
+
+Here's a preview of Code Nexus:
+
+1. **Login Screen**  
+   ![Login Screen](https://github.com/KumudBhatt/Code-Nexus/blob/main/main/frontend/preview/1.png)
+
+2. **Dashboard**  
+   ![Dashboard](https://github.com/KumudBhatt/Code-Nexus/blob/main/main/frontend/preview/2.png)
+
+3. **Projects View**  
+   ![Projects View](https://github.com/KumudBhatt/Code-Nexus/blob/main/main/frontend/preview/3.png)
+
+4. **Collaborative Code Editor**  
+   ![Collaborative Code Editor](https://github.com/KumudBhatt/Code-Nexus/blob/main/main/frontend/preview/4.png)
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
