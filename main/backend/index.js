@@ -18,90 +18,134 @@ app.use(cors());
 app.use(express.json());
 app.use("/api/v1", rootRouter);
 
-const connectedUsers = {};
+// Map to store rooms and their respective states
+const rooms = new Map();
 
-// Socket.IO configuration
-io.on('connection', (socket) => {
-    // Handle joining a room
-    socket.on('joinRoom', ({ roomId, username }) => {
-        socket.join(roomId);
-        connectedUsers[socket.id] = username;
-        
-        console.log(`${username} joined room: ${roomId}`);
+io.on("connection", (socket) => {
+  console.log("A user connected");
 
-        // Broadcast the updated client list to the room
-        const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []).map(
-            (socketId) => ({ username: connectedUsers[socketId] }) // Send as objects with username field
-        );
-        io.to(roomId).emit('clientUpdate', clientsInRoom);
-
-        // Notify others in the room that a new user has joined
-        socket.broadcast.to(roomId).emit('userJoined', username);
-    });
-
-    // Handle code updates
-    socket.on('codeUpdate', ({ roomId, code }) => {
-        console.log(`${connectedUsers[socket.id].username} updated the code in room: ${roomId}`);
-        socket.broadcast.to(roomId).emit('codeUpdate', code);
-    });
-
-    // Handle input updates
-    socket.on('inputUpdate', ({ roomId, input }) => {
-        console.log(`${connectedUsers[socket.id].username} updated the input in room: ${roomId}`);
-        socket.broadcast.to(roomId).emit('inputUpdate', input);
-    });
-
-    // Handle output updates
-    socket.on('outputUpdate', ({ roomId, output }) => {
-        console.log(`${connectedUsers[socket.id].username} updated the output in room: ${roomId}`);
-        socket.broadcast.to(roomId).emit('outputUpdate', output);
-    });
-
-    // Handle user leaving the room
-    socket.on('leaveRoom', ({ roomId }) => {
-        const username = connectedUsers[socket.id]?.username;
-        socket.leave(roomId);
-        delete connectedUsers[socket.id];
-
-        console.log(`${username} left room: ${roomId}`);
-
-        // Update the client list in the room
-        updateClientList(roomId);
-    });
-
-    // Handle the session owner ending the session
-    socket.on('endSession', ({ roomId }) => {
-        const username = connectedUsers[socket.id]?.username;
-        console.log(`${username} ended the session in room: ${roomId}`);
-        socket.broadcast.to(roomId).emit('roomDisbanded');
-        io.in(roomId).socketsLeave(roomId);
-
-        // Clear all users in the room
-        for (const socketId of Array.from(io.sockets.adapter.rooms.get(roomId) || [])) {
-            delete connectedUsers[socketId];
-        }
-    });
-
-    // Handle user disconnecting
-    socket.on('disconnect', () => {
-        const { username, roomId } = connectedUsers[socket.id] || {};
-        delete connectedUsers[socket.id];
-        
-        console.log(`${username} disconnected`);
-
-        if (roomId) {
-            // Notify other users in the room and update the client list
-            updateClientList(roomId);
-        }
-    });
-
-    // Function to update the client list in a room
-    function updateClientList(roomId) {
-        const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []).map(
-            (socketId) => connectedUsers[socketId]?.username
-        );
-        io.to(roomId).emit('clientUpdate', clientsInRoom);
+  // When a user joins a room
+  socket.on("joinRoom", ({ roomId, username }) => {
+    socket.join(roomId);
+    if (!rooms.has(roomId)) {
+      rooms.set(roomId, {
+        users: new Map(),
+        code: "",
+        input: "",
+        output: "",
+      });
     }
+    rooms.get(roomId).users.set(socket.id, username);
+
+    console.log(`${username} joined room: ${roomId}`);
+
+    // Send current room state to the joining user
+    const roomState = getRoomState(roomId);
+    socket.emit("roomState", roomState);
+
+    // Broadcast updated client list to the room
+    broadcastClientList(roomId);
+  });
+
+  // Handle code updates
+  socket.on("codeUpdate", ({ roomId, code, username }) => {
+    console.log(`${username} updated the code in room: ${roomId}`);
+    socket.to(roomId).emit("codeUpdate", code);
+    updateRoomState(roomId, "code", code);
+  });
+
+  // Handle input updates
+  socket.on("inputUpdate", ({ roomId, input, username }) => {
+    console.log(`${username} updated the input in room: ${roomId}`);
+    socket.to(roomId).emit("inputUpdate", input);
+    updateRoomState(roomId, "input", input);
+  });
+
+  // Handle output updates
+  socket.on("outputUpdate", ({ roomId, output, username }) => {
+    console.log(`${username} updated the output in room: ${roomId}`);
+    socket.to(roomId).emit("outputUpdate", output);
+    updateRoomState(roomId, "output", output);
+  });
+
+  // Handle a user leaving a room
+  socket.on("leaveRoom", ({ roomId, username }) => {
+    handleUserLeave(socket, roomId, username);
+  });
+
+  // Handle session end
+  socket.on("endSession", ({ roomId, username }) => {
+    console.log(`${username} ended the session in room: ${roomId}`);
+    io.to(roomId).emit("roomDisbanded");
+    io.in(roomId).socketsLeave(roomId);
+    rooms.delete(roomId);
+  });
+
+  // Handle user disconnect
+  socket.on("disconnect", () => {
+    console.log("A user disconnected");
+    for (const [roomId, roomData] of rooms.entries()) {
+      if (roomData.users.has(socket.id)) {
+        const username = roomData.users.get(socket.id);
+        handleUserLeave(socket, roomId, username);
+        return;
+      }
+    }
+  });
+});
+
+// Handle when a user leaves a room
+function handleUserLeave(socket, roomId, username) {
+  socket.leave(roomId);
+  if (rooms.has(roomId)) {
+    const room = rooms.get(roomId);
+    room.users.delete(socket.id);
+    if (room.users.size === 0) {
+      rooms.delete(roomId); // Delete the room if empty
+    } else {
+      broadcastClientList(roomId); // Broadcast updated client list
+    }
+  }
+  console.log(`${username} left room: ${roomId}`);
+}
+
+// Broadcast the list of clients in the room
+function broadcastClientList(roomId) {
+  if (rooms.has(roomId)) {
+    const clientList = Array.from(rooms.get(roomId).users.values());
+    io.to(roomId).emit("clientUpdate", clientList);
+  }
+}
+
+// Get the current state of the room
+function getRoomState(roomId) {
+  if (rooms.has(roomId)) {
+    const { code, input, output } = rooms.get(roomId);
+    return { code, input, output };
+  }
+  return {
+    code: "",
+    input: "",
+    output: "",
+  };
+}
+
+// Update the state of the room
+function updateRoomState(roomId, field, value) {
+  if (rooms.has(roomId)) {
+    rooms.get(roomId)[field] = value;
+  }
+}
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send("Something broke!");
+});
+
+// 404 handler
+app.use((req, res, next) => {
+  res.status(404).send("Sorry, that route doesn't exist.");
 });
 
 server.listen(PORT, () => {

@@ -295,12 +295,19 @@ const EditorPage = () => {
           <div>
             <h2 className="text-lg font-semibold mb-2">Connected Clients:</h2>
             <ul className="flex flex-wrap gap-4">
-              {clients.map((client, index) => (
-                <li key={index} className="text-sm flex flex-col items-center">
-                  <Avatar name={client.username} size="50" round={true} /> 
-                  <span className="mt-2">{client.username}</span>
-                </li>
-              ))}
+            {clients.map((client, index) => (
+  <li key={index} className="text-sm flex flex-col items-center">
+    {client ? (
+      <>
+        <Avatar name={client} size="50" round={true} />
+        <span className="mt-2">{client}</span>
+      </>
+    ) : (
+      <span className="mt-2">Unknown User</span>
+    )}
+  </li>
+))}
+
             </ul>
           </div>
         )}
