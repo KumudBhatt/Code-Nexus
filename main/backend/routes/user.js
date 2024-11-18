@@ -273,7 +273,7 @@ userRouter.post('/projects/:projectId/run', authMiddleware, submissionLimiter, a
 
         return res.status(200).json(formatResponse('success', 'Execution successful', output));
     } catch (error) {
-        console.error("Error executing project:", error);
+        console.error("Error executing project:", error.message);
         res.status(500).json(formatResponse('error', 'Internal server error', error.message));
     }
 });

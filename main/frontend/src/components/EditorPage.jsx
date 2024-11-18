@@ -11,7 +11,7 @@ import Avatar from 'react-avatar';
 const EditorPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { projectId } = useParams(); // Project ID from URL
+  const { projectId } = useParams();
   const [inputValue, setInputValue] = useState('');
   const [outputValue, setOutputValue] = useState('');
   const [language, setLanguage] = useState('cpp');
@@ -33,7 +33,7 @@ const EditorPage = () => {
     setToken(storedToken);
 
     try {
-      const decodedToken = jwtDecode(storedToken); // Decode the token
+      const decodedToken = jwtDecode(storedToken);
       setUsername(decodedToken.username);
     } catch (error) {
       console.error('Error decoding token:', error);
@@ -43,7 +43,7 @@ const EditorPage = () => {
       try {
         const { data } = await axiosInstance.get(`/user/projects/${projectId}`, {
           headers: { Authorization: `Bearer ${storedToken}` },
-          params: { room: roomId }, // Send roomId as a query parameter
+          params: { room: roomId },
         });
         const code = data.data?.data;
         setCode(code || '// Type your code here\n');
@@ -79,15 +79,42 @@ const EditorPage = () => {
       format: language,
     };
     try {
-      const { data } = await axiosInstance.post(`/user/projects/${projectId}/run`, payload, {
+      const response = await axiosInstance.post(`/user/projects/${projectId}/run`, payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setOutputValue(data.data);
+    
+      const data = response.data;
+    
+      if (data.status === 'error') {
+        setOutputValue(`Error: ${data.message}`);
+      } else {
+        setOutputValue(data.data);
+      }
+
       if (socketRef.current && roomId) {
-        socketRef.current.emit('outputUpdate', { roomId, output: data.data, username });
+        socketRef.current.emit('outputUpdate', { roomId, output: data.status === 'error' ? `Error: ${data.message}` : data.data, username });
       }
     } catch (error) {
-      console.error('Error running code:', error.response?.data?.message || error.message);
+      console.error('Error running code:', error);
+      let errorMessage = 'An unexpected error occurred. Please try again.';
+    
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        if (error.response.status === 500) {
+          errorMessage = error.response.data.data;
+        } else if (error.response.data && error.response.data.message) {
+          errorMessage = `Error: ${error.response.data.message}`;
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        errorMessage = 'No response received from the server. Please check your internet connection and try again.';
+      }
+    
+      setOutputValue(errorMessage);
+    
+      if (socketRef.current && roomId) {
+        socketRef.current.emit('outputUpdate', { roomId, output: errorMessage, username });
+      }
     }
   };
 
@@ -106,7 +133,6 @@ const EditorPage = () => {
   const handleCollaborativeMode = async () => {
     if (socketRef.current) {
       if (isOwner) {
-        // Disband the room if the user is the owner
         try {
           await axiosInstance.put(`/user/projects/${projectId}/disbandRoom`, null, {
             headers: { Authorization: `Bearer ${token}` },
@@ -121,7 +147,6 @@ const EditorPage = () => {
         setIsOwner(false);
         navigate('/dashboard');
       } else {
-        // Leave the room if the user is not the owner
         socketRef.current.emit('leaveRoom', { roomId, username });
         socketRef.current.disconnect();
         setRoomId('');
@@ -131,7 +156,6 @@ const EditorPage = () => {
       return;
     }
 
-    // If roomId already exists in state, join the existing session
     if (roomId) {
       const socket = io('http://localhost:3000');
       socketRef.current = socket;
@@ -154,7 +178,6 @@ const EditorPage = () => {
         navigate('/dashboard');
       });
     } else {
-      // Create a new room if no roomId exists
       const generatedRoomId = uuidv4();
 
       try {
@@ -197,7 +220,7 @@ const EditorPage = () => {
 
   useEffect(() => {
     const query = new URLSearchParams(location.search);
-    const room = query.get('room'); // Extract roomId from URL query parameter
+    const room = query.get('room');
 
     if (room) {
       setRoomId(room);
@@ -295,19 +318,18 @@ const EditorPage = () => {
           <div>
             <h2 className="text-lg font-semibold mb-2">Connected Clients:</h2>
             <ul className="flex flex-wrap gap-4">
-            {clients.map((client, index) => (
-  <li key={index} className="text-sm flex flex-col items-center">
-    {client ? (
-      <>
-        <Avatar name={client} size="50" round={true} />
-        <span className="mt-2">{client}</span>
-      </>
-    ) : (
-      <span className="mt-2">Unknown User</span>
-    )}
-  </li>
-))}
-
+              {clients.map((client, index) => (
+                <li key={index} className="text-sm flex flex-col items-center">
+                  {client ? (
+                    <>
+                      <Avatar name={client} size="50" round={true} />
+                      <span className="mt-2">{client}</span>
+                    </>
+                  ) : (
+                    <span className="mt-2">Unknown User</span>
+                  )}
+                </li>
+              ))}
             </ul>
           </div>
         )}
@@ -377,6 +399,10 @@ const EditorPage = () => {
                   onChange={handleOutputChange}
                   readOnly
                   placeholder="Output will appear here..."
+                  style={{ 
+                    backgroundColor: outputValue.startsWith('Error:') || outputValue.startsWith('Compilation Failed:') ? '#FFEBEE' : 'white',
+                    color: outputValue.startsWith('Error:') || outputValue.startsWith('Compilation Failed:') ? '#D32F2F' : 'black'
+                  }}
                 />
               </div>
             </div>
