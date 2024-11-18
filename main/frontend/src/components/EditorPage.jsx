@@ -157,7 +157,7 @@ const EditorPage = () => {
     }
 
     if (roomId) {
-      const socket = io('http://localhost:3000');
+      const socket = io('https://13.53.152.19:3000');
       socketRef.current = socket;
 
       socket.emit('joinRoom', { roomId, username });
@@ -192,7 +192,7 @@ const EditorPage = () => {
         setRoomId(generatedRoomId);
         setIsOwner(true);
 
-        const socket = io('http://localhost:3000');
+        const socket = io('https://13.53.152.19:3000');
         socketRef.current = socket;
 
         socket.emit('joinRoom', { roomId: generatedRoomId, username });
@@ -224,7 +224,7 @@ const EditorPage = () => {
 
     if (room) {
       setRoomId(room);
-      const socket = io('http://localhost:3000');
+      const socket = io('https://13.53.152.19:3000');
       socketRef.current = socket;
 
       socket.emit('joinRoom', { roomId: room, username });
