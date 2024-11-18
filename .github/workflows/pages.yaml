@@ -30,6 +30,6 @@ jobs:
       # Build the frontend
       - name: Build frontend
         working-directory: main/frontend
-        run: npm run dev
+        run: npm run build
 
       # Optionally deploy or perform additional frontend actions here
