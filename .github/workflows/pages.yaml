@@ -26,10 +26,22 @@ jobs:
         working-directory: main/frontend
         run: npm install
 
-
       # Build the frontend
       - name: Build frontend
         working-directory: main/frontend
         run: npm run build
 
-      # Optionally deploy or perform additional frontend actions here
+  # Deployment job
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: main/frontend/dist
