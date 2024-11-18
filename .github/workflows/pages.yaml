@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the repository
+      - uses: actions/checkout@v4
+
+      # Set up Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16' # Adjust to your Node.js version
+
+      # Install dependencies for the frontend
+      - name: Install frontend dependencies
+        working-directory: main/frontend
+        run: npm install
+
+      # Run tests for the frontend
+      - name: Run frontend tests
+        working-directory: main/frontend
+        run: npm test
+
+      # Build the frontend
+      - name: Build frontend
+        working-directory: main/frontend
+        run: npm run build
+
+      # Optionally deploy or perform additional frontend actions here
