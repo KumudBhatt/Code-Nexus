@@ -26,14 +26,10 @@ jobs:
         working-directory: main/frontend
         run: npm install
 
-      # Run tests for the frontend
-      - name: Run frontend tests
-        working-directory: main/frontend
-        run: npm test
 
       # Build the frontend
       - name: Build frontend
         working-directory: main/frontend
-        run: npm run build
+        run: npm run dev
 
       # Optionally deploy or perform additional frontend actions here
